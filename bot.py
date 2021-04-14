@@ -1,11 +1,12 @@
-from typing import Union
-import re
 import logging
+import re
 from random import choice
-from redis import Redis
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from configs import TOKEN, REQUEST_KWARGS
+from typing import Union
 
+from redis import Redis
+from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
+
+from configs import REQUEST_KWARGS, TOKEN
 
 updater = Updater(
     token=TOKEN,
@@ -21,11 +22,18 @@ logging.basicConfig(
 r = Redis(host="localhost", port=6379, db=1)
 
 # call the bot
-PREFIX = "hey "
+PREFIXES = ["hey ", "Hey ", "hoy ", "Hoy ", "هوی ", "هوي "]
 # status of bot in a chat
 IDLE = "IDLE"
 LEARNING_QUESTION = "LEARNING_QUESTION"
 LEARNING_ANSWER = "LEARNING_ANSWER"
+
+
+def compile_regexes(context):
+    context.bot_data["regexes"]: list[tuple[str, re.Pattern]] = []
+    regexes = r.keys("^*")
+    for regex in regexes:
+        context.bot_data["regexes"].append((regex.decode(), re.compile(regex.decode())))
 
 
 def start(update, context):
@@ -49,11 +57,11 @@ def cancel(update, context):
 def message(update, context):
     if (
         update.message.chat.type != "private"
-        and update.message.text[: len(PREFIX)] != PREFIX
+        and update.message.text[:4] not in PREFIXES
     ):
         return
-    if update.message.text[: len(PREFIX)] == PREFIX:
-        update.message.text = update.message.text[len(PREFIX) :]
+    if update.message.text[:4] in PREFIXES:
+        update.message.text = update.message.text[4:]
     if "status" not in context.chat_data:
         context.chat_data["status"] = IDLE
 
@@ -73,6 +81,8 @@ def message(update, context):
         )
     elif context.chat_data["status"] == LEARNING_ANSWER:
         r.set(context.chat_data["question"], update.message.text)
+        if context.chat_data["question"][0] == "^":
+            compile_regexes(context=context)
         context.chat_data["status"] = IDLE
         context.chat_data["question"] = ""
         context.bot.send_message(
@@ -80,14 +90,14 @@ def message(update, context):
             text=choice(["OK", "I got it!", "I learned it."]),
         )
     elif context.chat_data["status"] == IDLE:
-        regexes = r.keys("^*")
-        print("regexes", regexes)
-        _match: Union[re.Match, None] = None
-        for regex in regexes:
-            _match = re.match(regex.decode(), update.message.text)
-            if _match is not None:
+        if "regexes" not in context.bot_data:
+            compile_regexes(context=context)
+        matched: Union[re.Match, None] = None
+        for regex in context.bot_data["regexes"]:
+            matched = regex[1].match(update.message.text)
+            if matched is not None:
                 break
-        if _match is None:
+        if matched is None:
             # non-regex question/answer
             answer_bytes: Union[bytes, None] = r.get(update.message.text)
             if answer_bytes is None:
@@ -95,10 +105,12 @@ def message(update, context):
             else:
                 answer = answer_bytes.decode()
         else:
-            groups: dict = _match.groupdict()
-            answer_bytes: Union[bytes, None] = r.get(regex)
+            groups: dict = matched.groupdict()
+            answer_bytes: Union[bytes, None] = r.get(regex[0])
+            # A rare case when redis and context.bot_data["regexes"] are out of sync
             if answer_bytes is None:
-                answer = "What?"
+                compile_regexes(context=context)
+                answer = "What? I can't remember well"
             else:
                 answer = answer_bytes.decode()
                 answer = answer.format(**groups)
