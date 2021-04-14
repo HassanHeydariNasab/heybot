@@ -55,9 +55,10 @@ def cancel(update, context):
 
 
 def message(update, context):
-    if (
-        update.message.chat.type != "private"
-        and update.message.text[:4] not in PREFIXES
+    if update.message.text + " " in PREFIXES:
+        pass
+    elif update.message.chat.type != "private" and (
+        update.message.text[:4] not in PREFIXES
     ):
         return
     if update.message.text[:4] in PREFIXES:
