@@ -1,12 +1,13 @@
 import logging
 import re
+import sys
 from random import choice
 from typing import Union
 
 from redis import Redis
 from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
 
-from configs import REQUEST_KWARGS, TOKEN
+from configs import REQUEST_KWARGS, TOKEN, WEBHOOK_URL, SSL_CERTIFICATE, LISTEN, PORT
 
 updater = Updater(
     token=TOKEN,
@@ -155,4 +156,13 @@ dispatcher.add_handler(CommandHandler("list", list_))
 dispatcher.add_handler(CommandHandler("forget", forget))
 dispatcher.add_handler(CommandHandler("cancel", cancel))
 dispatcher.add_handler(MessageHandler(Filters.text & (~Filters.command), message))
-updater.start_polling()
+if "--webhook" in sys.argv:
+    updater.start_webhook(
+        listen=LISTEN,
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=WEBHOOK_URL,
+        cert=open(SSL_CERTIFICATE, "rb"),
+    )
+else:
+    updater.start_polling()
