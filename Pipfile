@@ -11,6 +11,7 @@ redis = "*"
 black = "==20.8b1"
 pylint = "*"
 jedi = "*"
+rope = "*"
 
 [requires]
 python_version = "3.9"
