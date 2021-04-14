@@ -27,6 +27,7 @@ PREFIXES = ["hey ", "Hey ", "hoy ", "Hoy ", "هوی ", "هوي "]
 IDLE = "IDLE"
 LEARNING_QUESTION = "LEARNING_QUESTION"
 LEARNING_ANSWER = "LEARNING_ANSWER"
+FORGET = "FORGET"
 
 
 def compile_regexes(context):
@@ -54,6 +55,21 @@ def cancel(update, context):
     context.bot.send_message(chat_id=update.effective_chat.id, text="Canceled.")
 
 
+def list_(update, context):
+    questions = r.keys("*")
+    questions_lines: str = ""
+    for question in questions:
+        questions_lines += question.decode() + "\n\n"
+    context.bot.send_message(chat_id=update.effective_chat.id, text=questions_lines)
+
+
+def forget(update, context):
+    context.chat_data["status"] = FORGET
+    context.bot.send_message(
+        chat_id=update.effective_chat.id, text="What should I forget?"
+    )
+
+
 def message(update, context):
     if update.message.text + " " in PREFIXES:
         pass
@@ -66,31 +82,7 @@ def message(update, context):
     if "status" not in context.chat_data:
         context.chat_data["status"] = IDLE
 
-    if context.chat_data["status"] == LEARNING_QUESTION:
-        if update.message.text[0] == "^":
-            try:
-                re.compile(update.message.text)
-            except re.error:
-                context.bot.send_message(
-                    chat_id=update.effective_chat.id, text="Invalid Regex!"
-                )
-                return
-        context.chat_data["question"] = update.message.text
-        context.chat_data["status"] = LEARNING_ANSWER
-        context.bot.send_message(
-            chat_id=update.effective_chat.id, text="Then what should I say?"
-        )
-    elif context.chat_data["status"] == LEARNING_ANSWER:
-        r.set(context.chat_data["question"], update.message.text)
-        if context.chat_data["question"][0] == "^":
-            compile_regexes(context=context)
-        context.chat_data["status"] = IDLE
-        context.chat_data["question"] = ""
-        context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=choice(["OK", "I got it!", "I learned it."]),
-        )
-    elif context.chat_data["status"] == IDLE:
+    if context.chat_data["status"] == IDLE:
         if "regexes" not in context.bot_data:
             compile_regexes(context=context)
         matched: Union[re.Match, None] = None
@@ -118,9 +110,49 @@ def message(update, context):
 
         context.bot.send_message(chat_id=update.effective_chat.id, text=answer)
 
+    elif context.chat_data["status"] == LEARNING_QUESTION:
+        if update.message.text[0] == "^":
+            try:
+                re.compile(update.message.text)
+            except re.error:
+                context.bot.send_message(
+                    chat_id=update.effective_chat.id, text="Invalid Regex!"
+                )
+                return
+        context.chat_data["question"] = update.message.text
+        context.chat_data["status"] = LEARNING_ANSWER
+        context.bot.send_message(
+            chat_id=update.effective_chat.id, text="Then what should I say?"
+        )
+
+    elif context.chat_data["status"] == LEARNING_ANSWER:
+        r.set(context.chat_data["question"], update.message.text)
+        if context.chat_data["question"][0] == "^":
+            compile_regexes(context=context)
+        context.chat_data["status"] = IDLE
+        context.chat_data["question"] = ""
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=choice(["OK", "I got it!", "I learned it."]),
+        )
+
+    elif context.chat_data["status"] == FORGET:
+        context.chat_data["status"] = IDLE
+        number_of_deleted = r.delete(update.message.text)
+        if number_of_deleted == 0:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id, text="Not found!"
+            )
+        elif number_of_deleted == 1:
+            context.bot.send_message(
+                chat_id=update.effective_chat.id, text="I forgot it!"
+            )
+
 
 dispatcher.add_handler(CommandHandler("start", start))
 dispatcher.add_handler(CommandHandler("learn", learn))
+dispatcher.add_handler(CommandHandler("list", list_))
+dispatcher.add_handler(CommandHandler("forget", forget))
 dispatcher.add_handler(CommandHandler("cancel", cancel))
 dispatcher.add_handler(MessageHandler(Filters.text & (~Filters.command), message))
 updater.start_polling()
