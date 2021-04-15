@@ -7,7 +7,16 @@ from typing import Union
 from redis import Redis
 from telegram.ext import CommandHandler, Filters, MessageHandler, Updater
 
-from configs import REQUEST_KWARGS, TOKEN, WEBHOOK_URL, SSL_CERTIFICATE, LISTEN, PORT
+from configs import (
+    REQUEST_KWARGS,
+    TOKEN,
+    WEBHOOK_URL,
+    SSL_CERTIFICATE,
+    LISTEN,
+    PORT,
+    BOT_USERNAME,
+    ADMIN_ID,
+)
 
 updater = Updater(
     token=TOKEN,
@@ -21,6 +30,7 @@ logging.basicConfig(
 )
 
 r = Redis(host="localhost", port=6379, db=1)
+r2 = Redis(host="localhost", port=6379, db=2)
 
 # call the bot
 PREFIXES = ["hey ", "Hey ", "hoy ", "Hoy ", "هوی ", "هوي "]
@@ -40,7 +50,10 @@ def compile_regexes(context):
 
 def start(update, context):
     context.bot.send_message(
-        chat_id=update.effective_chat.id, text="I'm a bot, please talk to me!"
+        chat_id=update.effective_chat.id,
+        text="Hello {first_name}! I'm a bot, please talk to me and teach me to talk".format(
+            first_name=update.effective_chat.first_name
+        ),
     )
 
 
@@ -69,6 +82,34 @@ def forget(update, context):
     context.bot.send_message(
         chat_id=update.effective_chat.id, text="What should I forget?"
     )
+
+
+def stats(update, context):
+    if update.effective_chat.id != ADMIN_ID:
+        return
+    keys: list = r2.keys("*")
+    text = ""
+    for key in keys:
+        text += key.decode() + ": " + r2.get(key).decode() + "\n"
+    context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+
+
+def on_new_chat_member(update, context):
+    for member in update.message.new_chat_members:
+        if member.username == BOT_USERNAME:
+            r2.set(update.effective_chat.id, str(update.effective_chat))
+            r2.incr("joins")
+            if update.effective_chat.type != "private":
+                context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Hello everyone :)\nSay Hey hello\nYou can teach me to talk",
+                )
+
+
+def on_left_chat_member(update, context):
+    if update.message.left_chat_member["username"] == BOT_USERNAME:
+        r2.delete(update.effective_chat.id)
+        r2.incr("lefts")
 
 
 def message(update, context):
@@ -155,7 +196,14 @@ dispatcher.add_handler(CommandHandler("learn", learn))
 dispatcher.add_handler(CommandHandler("list", list_))
 dispatcher.add_handler(CommandHandler("forget", forget))
 dispatcher.add_handler(CommandHandler("cancel", cancel))
+dispatcher.add_handler(CommandHandler("stats", stats))
 dispatcher.add_handler(MessageHandler(Filters.text & (~Filters.command), message))
+dispatcher.add_handler(
+    MessageHandler(Filters.status_update.new_chat_members, on_new_chat_member)
+)
+dispatcher.add_handler(
+    MessageHandler(Filters.status_update.left_chat_member, on_left_chat_member)
+)
 if "--webhook" in sys.argv:
     updater.start_webhook(
         listen=LISTEN,
