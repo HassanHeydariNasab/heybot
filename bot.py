@@ -53,7 +53,7 @@ def start(update, context):
     r2.incr("starts")
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="Hello {first_name}! I'm a bot, please talk to me and teach me to talk".format(
+        text="Hello {first_name}! My name's Hey, please talk to me and teach me to talk by /learn command".format(
             first_name=update.effective_chat.first_name
         ),
     )
@@ -104,7 +104,9 @@ def on_new_chat_member(update, context):
             if update.effective_chat.type != "private":
                 context.bot.send_message(
                     chat_id=update.effective_chat.id,
-                    text="Hello everyone :)\nSay Hey hello\nYou can teach me to talk",
+                    text="Hello everyone :)\nMy name's Hey.\nCall my name at the beginning of your message and I'll respond\nYou can teach me to talk by /learn@{BOT_USERNAME}".format(
+                        BOT_USERNAME=BOT_USERNAME
+                    ),
                 )
 
 
@@ -138,7 +140,7 @@ def message(update, context):
             # non-regex question/answer
             answer_bytes: Union[bytes, None] = r.get(update.message.text)
             if answer_bytes is None:
-                answer = "What?"
+                answer = "What? Teach me by /learn command"
             else:
                 answer = answer_bytes.decode()
         else:
