@@ -49,6 +49,8 @@ def compile_regexes(context):
 
 
 def start(update, context):
+    r2.set(update.effective_chat.id, str(update.effective_chat))
+    r2.incr("starts")
     context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="Hello {first_name}! I'm a bot, please talk to me and teach me to talk".format(
